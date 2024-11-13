@@ -1,4 +1,3 @@
-// server.js
 const express = require('express');
 const bodyParser = require('body-parser');
 const app = express();
@@ -19,8 +18,8 @@ app.post('/encode', (req, res) => {
 
 app.post('/decode', (req, res) => {
     const { data } = req.body;
-    const { decodedData, steps, parityTable } = decodeHamming(data);
-    res.json({ decodedData, steps, parityTable });
+    const { decodedData, steps, parityTable, error, errorDetails } = decodeHamming(data);
+    res.json({ decodedData, steps, parityTable, error, errorDetails });
 });
 
 function calculateHammingDistance(str1, str2) {
@@ -66,7 +65,7 @@ function encodeHamming(data) {
         const affectedBits = getAffectedBits(encodedBits, parityPos);
         const parityValue = calculateParity(encodedBits, parityPos);
         encodedBits[parityPos - 1] = parityValue;
-        steps.push(`Calcular la paridad en la posicion ${parityPos}: ${parityValue}`);
+        steps.push(`Calcular la paridad en la posición ${parityPos}: ${parityValue}`);
 
         parityTable.push({
             parityPos: parityPos,
@@ -75,7 +74,6 @@ function encodeHamming(data) {
         });
     }
 
-    // Calcular la distancia mínima de Hamming del código
     const minDistance = Math.floor(Math.log2(data.length)) + 1;
     steps.push(`Distancia mínima de Hamming para este código: ${minDistance}`);
     steps.push(`Este código puede detectar ${minDistance - 1} errores y corregir ${Math.floor((minDistance - 1)/2)} errores`);
@@ -114,11 +112,12 @@ function decodeHamming(data) {
     let errorPosition = 0;
     let steps = [`Datos recibidos: ${data}`];
     let parityTable = [];
+    let originalData = [...dataBits];
 
     for (let i = 0; Math.pow(2, i) <= m; i++) {
         const parityPos = Math.pow(2, i);
         const parity = calculateParity(dataBits, parityPos);
-        steps.push(`Paridad calculada para la posicion ${parityPos}: ${parity}`);
+        steps.push(`Paridad calculada para la posición ${parityPos}: ${parity}`);
         if (parity !== 0) {
             errorPosition += parityPos;
         }
@@ -131,15 +130,29 @@ function decodeHamming(data) {
         });
     }
 
+    let correctedData = null;
     if (errorPosition !== 0) {
         if (errorPosition > m) {
-            steps.push(`La posicion de error ${errorPosition} esta fuera de limites y nos puede corregir`);
-            return { decodedData: null, steps, parityTable, error: true };
+            steps.push(`La posición de error ${errorPosition} está fuera de límites y no se puede corregir`);
+            return { 
+                decodedData: null, 
+                steps, 
+                parityTable, 
+                error: true,
+                errorDetails: {
+                    position: errorPosition,
+                    originalData: data,
+                    correctedData: null
+                }
+            };
         }
         dataBits[errorPosition - 1] ^= 1;
-        steps.push(`Error detectado en la posicion ${errorPosition}, corregido`);
+        correctedData = dataBits.join('');
+        steps.push(`Error detectado en la posición ${errorPosition}`);
+        steps.push(`Dato original: ${data}`);
+        steps.push(`Dato corregido: ${correctedData}`);
     } else {
-        steps.push(`No se encontro error`);
+        steps.push(`No se encontró ningún error en los datos`);
     }
 
     const decodedBits = [];
@@ -149,7 +162,17 @@ function decodeHamming(data) {
         }
     }
 
-    return { decodedData: decodedBits.join(''), steps, parityTable, error: false };
+    return { 
+        decodedData: decodedBits.join(''), 
+        steps, 
+        parityTable, 
+        error: false,
+        errorDetails: errorPosition !== 0 ? {
+            position: errorPosition,
+            originalData: data,
+            correctedData: correctedData
+        } : null
+    };
 }
 
 app.listen(port, () => {
